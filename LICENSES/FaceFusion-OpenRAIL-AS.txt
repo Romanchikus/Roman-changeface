@@ -1,0 +1,8 @@
+OpenRAIL-AS license
+
+Copyright (c) 2026 Henry Ruhs
+
+FaceFusion 3.9.1 (Henry Ruhs, https://facefusion.io) is used by app/inference
+to run the hyperswap backend. It is not a Python package of this project.
+The text above is the license notice shipped in facefusion/LICENSE.md.
+Source: https://github.com/facefusion/facefusion

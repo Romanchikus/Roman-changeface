@@ -1,0 +1,97 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: changeface
+      POSTGRES_PASSWORD: changeface
+      POSTGRES_DB: changeface
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U changeface -d changeface"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    init: true
+    restart: on-failure
+    gpus: all
+    environment: &app_env
+      DATABASE_URL: postgresql+psycopg://changeface:changeface@postgres:5432/changeface
+      REDIS_URL: redis://redis:6379/0
+      STORAGE_DIR: /app/storage
+      INFERENCE_BACKEND: hyperswap
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      HYPERSWAP_WEIGHTS: /app/facefusion/.assets/models
+      MAX_IMAGE_BYTES: "10485760"
+      MAX_VIDEO_BYTES: "104857600"
+      MAX_VIDEO_DURATION_SEC: "30"
+      GPU_LOCK_TTL_SEC: "600"
+      CELERY_TASK_ALWAYS_EAGER: "false"
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    init: true
+    restart: on-failure
+    gpus: all
+    command:
+      - celery
+      - -A
+      - app.worker.celery_app:celery_app
+      - worker
+      - --pool=solo
+      - --concurrency=1
+      - --loglevel=INFO
+    environment: *app_env
+    volumes:
+      - ./storage:/app/storage
+      - ./facefusion:/app/facefusion
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  facefusion:
+    profiles: ["cli"]
+    build: .
+    init: true
+    working_dir: /app/facefusion
+    gpus: all
+    volumes:
+      - ./facefusion:/app/facefusion
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      HOST_UID: ${HOST_UID:-1000}
+      HOST_GID: ${HOST_GID:-1000}
+    command:
+      - /app/facefusion-headless.sh
+
+volumes:
+  pgdata:

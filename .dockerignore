@@ -1,0 +1,15 @@
+.venv
+.git
+**/.git
+.pytest_cache
+.test-runtime
+storage
+frontend/node_modules
+frontend/dist
+**/__pycache__
+**/*.pyc
+.env
+facefusion/.venv
+facefusion/.assets
+facefusion/.jobs
+facefusion/.caches

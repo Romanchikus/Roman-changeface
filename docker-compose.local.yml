@@ -1,0 +1,49 @@
+services:
+  api:
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --reload
+      - --reload-dir
+      - /app/app
+    volumes:
+      - ./app:/app/app
+      - ./migrations:/app/migrations
+      - ./alembic.ini:/app/alembic.ini
+      - ./scripts/docker-entrypoint.sh:/app/docker-entrypoint.sh
+
+  worker:
+    command:
+      - python
+      - -m
+      - watchfiles
+      - --filter
+      - python
+      - celery -A app.worker.celery_app:celery_app worker --pool=solo --concurrency=1 --loglevel=INFO
+      - /app/app
+    volumes:
+      - ./app:/app/app
+      - ./migrations:/app/migrations
+      - ./alembic.ini:/app/alembic.ini
+      - ./scripts/docker-entrypoint.sh:/app/docker-entrypoint.sh
+
+  web:
+    image: node:22-alpine
+    working_dir: /src
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    environment:
+      VITE_API_PROXY: http://api:8000
+    volumes:
+      - ./frontend:/src
+      - web_node_modules:/src/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
+volumes:
+  web_node_modules:

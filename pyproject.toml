@@ -1,0 +1,47 @@
+[project]
+name = "changeface"
+version = "0.1.0"
+description = "Queued face-swap API. The HTTP request returns a job id; a single GPU worker runs inference."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "celery[redis]>=5.4.0",
+    "fastapi>=0.115.0",
+    "aiosqlite>=0.20.0",
+    "alembic>=1.14.0",
+    "psycopg[binary]>=3.2.0",
+    "pydantic-settings>=2.6.0",
+    "python-multipart>=0.0.12",
+    "redis>=5.2.0",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "uvicorn[standard]>=0.32.0",
+    "fastapi-filter>=2.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.0",
+    "pytest>=8.3.0",
+]
+
+[tool.uv]
+package = false
+
+# FaceFusion is called from app/inference. It is a separate checkout, not a pip dependency.
+[tool.changeface.third-party.facefusion]
+name = "FaceFusion"
+version = "3.9.1"
+license = "OpenRAIL-AS"
+copyright = "Copyright (c) 2026 Henry Ruhs"
+author = "Henry Ruhs"
+url = "https://facefusion.io"
+source = "https://github.com/facefusion/facefusion"
+used-by = "app/inference"
+license-file = "LICENSES/FaceFusion-OpenRAIL-AS.txt"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "canary: real source image and target video; skipped until fixtures and weights are present",
+]
