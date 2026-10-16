@@ -1,0 +1,24 @@
+{
+  "include": [
+    "app",
+    "tests",
+    "migrations",
+    "facefusion/facefusion"
+  ],
+  "exclude": [
+    "**/node_modules",
+    "**/.venv",
+    "**/__pycache__",
+    "**/.test-runtime",
+    "**/storage",
+    "frontend"
+  ],
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "off",
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "extraPaths": ["."]
+    }
+  ]
+}

@@ -2,7 +2,9 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from app.db.models import Job, Media
+from app.db.media_link import INPUT, OUTPUT, SOURCE, VIDEO, models_for
+from app.db.models import Job, Media, MusicJob, TextJob
+from app.db.types import TextParameters
 
 
 class JobOut(BaseModel):
@@ -92,6 +94,89 @@ class MetricHistory(BaseModel):
     requests_last_10s: int
 
 
+class MusicParametersOut(BaseModel):
+    task_type: str
+    caption: str
+    duration_sec: float
+    seed: int
+    audio_id: int | None
+
+
+class MusicJobOut(BaseModel):
+    id: int
+    status: str
+    prompt: str
+    task_type: str
+    duration_sec: float
+    seed: int
+    inference_steps: int
+    shift: float
+    parameters: MusicParametersOut
+    error_code: str | None
+    error_message: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    input_media_id: int | None
+    output_media_id: int | None
+    input_path: str
+    output_path: str
+    download_url: str | None
+
+
+class TextParametersOut(BaseModel):
+    model: str
+    prompt: str
+    max_new_tokens: int
+    system: str | None = None
+    temperature: float | None = None
+    top_p: float | None = None
+    top_k: int | None = None
+    min_p: float | None = None
+    typical_p: float | None = None
+    do_sample: bool | None = None
+    seed: int | None = None
+    repetition_penalty: float | None = None
+    presence_penalty: float | None = None
+    frequency_penalty: float | None = None
+    stop: list[str] | None = None
+    ignore_eos: bool | None = None
+    min_new_tokens: int | None = None
+
+
+class TextJobIn(BaseModel):
+    model: str
+    prompt: str
+    max_new_tokens: int
+    system: str | None = None
+    temperature: float | None = None
+    top_p: float | None = None
+    top_k: int | None = None
+    min_p: float | None = None
+    typical_p: float | None = None
+    do_sample: bool | None = None
+    seed: int | None = None
+    repetition_penalty: float | None = None
+    presence_penalty: float | None = None
+    frequency_penalty: float | None = None
+    stop: list[str] | None = None
+    ignore_eos: bool | None = None
+    min_new_tokens: int | None = None
+
+
+class TextJobOut(BaseModel):
+    id: int
+    status: str
+    prompt: str
+    parameters: TextParametersOut
+    output: str | None
+    error_code: str | None
+    error_message: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
 class LimitsOut(BaseModel):
     max_image_bytes: int
     max_video_bytes: int
@@ -128,16 +213,87 @@ def to_media_out(media: Media, folder: str) -> MediaOut:
     )
 
 
+def to_music_out(job: MusicJob) -> MusicJobOut:
+    outputs = models_for(job, OUTPUT)
+    inputs = models_for(job, INPUT)
+    output = outputs[0] if outputs else None
+    source = inputs[0] if inputs else None
+    stored = job.parameters
+    download = None
+    if job.status == "succeeded" and output is not None:
+        download = f"/api/files/audios/{output.id}/download"
+    return MusicJobOut(
+        id=job.id,
+        status=job.status,
+        prompt=job.prompt,
+        task_type=job.task_type,
+        duration_sec=output.duration_sec if output is not None and output.duration_sec is not None else 0,
+        seed=job.seed,
+        inference_steps=job.inference_steps,
+        shift=job.shift,
+        parameters=MusicParametersOut(
+            task_type=stored.task_type,
+            caption=stored.caption,
+            duration_sec=stored.duration_sec,
+            seed=stored.seed,
+            audio_id=stored.audio_id,
+        ),
+        error_code=job.error_code,
+        error_message=job.error_message,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        finished_at=job.finished_at,
+        input_media_id=source.id if source is not None else None,
+        output_media_id=output.id if output is not None else None,
+        input_path=source.path if source is not None else "",
+        output_path=output.path if output is not None else "",
+        download_url=download,
+    )
+
+
+def _text_parameters_out(stored: TextParameters) -> TextParametersOut:
+    return TextParametersOut(
+        model=stored.model,
+        prompt=stored.prompt,
+        max_new_tokens=stored.max_new_tokens,
+        system=stored.system,
+        temperature=stored.temperature,
+        top_p=stored.top_p,
+        top_k=stored.top_k,
+        min_p=stored.min_p,
+        typical_p=stored.typical_p,
+        do_sample=stored.do_sample,
+        seed=stored.seed,
+        repetition_penalty=stored.repetition_penalty,
+        presence_penalty=stored.presence_penalty,
+        frequency_penalty=stored.frequency_penalty,
+        stop=stored.stop,
+        ignore_eos=stored.ignore_eos,
+        min_new_tokens=stored.min_new_tokens,
+    )
+
+
+def to_text_out(job: TextJob) -> TextJobOut:
+    return TextJobOut(
+        id=job.id,
+        status=job.status,
+        prompt=job.prompt,
+        parameters=_text_parameters_out(job.parameters),
+        output=job.output,
+        error_code=job.error_code,
+        error_message=job.error_message,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        finished_at=job.finished_at,
+    )
+
+
 def to_job_out(job: Job) -> JobOut:
     download = f"/api/jobs/{job.id}/download" if job.status == "succeeded" else None
-    faces = [job.input_image]
-    if job.input_image_2 is not None:
-        faces.append(job.input_image_2)
-    if job.input_image_3 is not None:
-        faces.append(job.input_image_3)
+    faces = models_for(job, SOURCE)
     source = faces[0]
-    video = job.input_video
-    output = job.output_video
+    video = models_for(job, VIDEO)[0]
+    output = models_for(job, OUTPUT)[0]
     return JobOut(
         id=job.id,
         status=job.status,

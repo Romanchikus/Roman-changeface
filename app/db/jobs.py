@@ -1,9 +1,9 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
 
 from app.db.filters import PAGE_LIMIT, JobFilter
-from app.db.models import Job, Media, Thumbnail, utcnow
+from app.db.media_link import OUTPUT, attach_media, models_for
+from app.db.models import Job, Thumbnail, utcnow
 from app.inference.pipeline import InferenceResult
 
 
@@ -11,16 +11,6 @@ async def insert_job(session: AsyncSession, job: Job) -> Job:
     session.add(job)
     await session.flush()
     return job
-
-
-def _load_media():
-    return (
-        joinedload(Job.input_image).joinedload(Media.thumbnail),
-        joinedload(Job.input_image_2).joinedload(Media.thumbnail),
-        joinedload(Job.input_image_3).joinedload(Media.thumbnail),
-        joinedload(Job.input_video).joinedload(Media.thumbnail),
-        joinedload(Job.output_video).joinedload(Media.thumbnail),
-    )
 
 
 async def latest_task(session: AsyncSession) -> Job | None:
@@ -40,29 +30,25 @@ async def latest_task(session: AsyncSession) -> Job | None:
 
 
 async def get_job(session: AsyncSession, job_id: int) -> Job | None:
-    stmt = select(Job).where(Job.id == job_id).options(*_load_media())
-    result = await session.execute(stmt)
-    return result.unique().scalar_one_or_none()
+    result = await session.execute(select(Job).where(Job.id == job_id))
+    job = result.scalar_one_or_none()
+    if job is not None:
+        await attach_media(session, [job])
+    return job
 
 
 async def list_jobs(session: AsyncSession, job_filter: JobFilter) -> list[Job]:
-    """List jobs using a fastapi-filter."""
-    stmt = select(Job).options(*_load_media())
-    stmt = job_filter.sort(job_filter.filter(stmt)).limit(PAGE_LIMIT)
+    """List face-swap jobs using a fastapi-filter."""
+    stmt = job_filter.sort(job_filter.filter(select(Job))).limit(PAGE_LIMIT)
     result = await session.execute(stmt)
-    return list(result.unique().scalars().all())
-
-
-async def mark_running(session: AsyncSession, job: Job) -> None:
-    """Record that the job started. The caller commits."""
-    job.status = "running"
-    job.started_at = utcnow()
+    jobs = list(result.scalars().all())
+    await attach_media(session, jobs)
+    return jobs
 
 
 async def mark_failed(session: AsyncSession, job_id: int, code: str, message: str) -> None:
     """Record a failure. The caller commits."""
-    stmt = select(Job).where(Job.id == job_id)
-    result = await session.execute(stmt)
+    result = await session.execute(select(Job).where(Job.id == job_id))
     job = result.scalar_one_or_none()
     if job is None or job.status in {"succeeded", "failed"}:
         return
@@ -91,7 +77,11 @@ async def mark_succeeded(
     job.error_code = None
     job.error_message = None
     job.finished_at = utcnow()
+    outputs = models_for(job, OUTPUT)
+    if not outputs:
+        return
+    output = outputs[0]
     if size_bytes is not None:
-        job.output_video.size_bytes = size_bytes
-    if thumb is not None and job.output_video.thumbnail is None:
-        session.add(Thumbnail(media_id=job.output_video.id, path=thumb))
+        output.size_bytes = size_bytes
+    if thumb is not None and output.thumbnail is None:
+        session.add(Thumbnail(media_id=output.id, path=thumb))

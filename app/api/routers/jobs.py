@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import allow_signed_in
 from app.db.filters import JobFilter
 from app.db.jobs import get_job, list_jobs
+from app.db.media_link import OUTPUT, models_for
 from app.db.session import get_db
 from app.schemas import JobOut, to_job_out
 from app.services.jobs import queue_swap
@@ -84,7 +85,7 @@ async def download(job_id: int, db: AsyncSession = Depends(get_db)) -> FileRespo
             status_code=409,
             detail={"code": "not_ready", "message": "The video is not ready."},
         )
-    path = Path(job.output_video.path)
+    path = Path(models_for(job, OUTPUT)[0].path)
     if not path.is_file():
         raise HTTPException(status_code=404, detail={"code": "missing_file", "message": "Output file is missing."})
     return FileResponse(

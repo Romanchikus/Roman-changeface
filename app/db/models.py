@@ -3,7 +3,15 @@ from datetime import datetime, timezone
 from sqlalchemy import BigInteger, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from app.db.types import AwareDateTime
+from app.db.types import (
+    AwareDateTime,
+    MediaSnapshot,
+    MediaSnapshotList,
+    MusicParameters,
+    MusicParametersColumn,
+    TextParameters,
+    TextParametersColumn,
+)
 
 
 def utcnow() -> datetime:
@@ -86,15 +94,7 @@ class Job(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     status: Mapped[str] = mapped_column(String(16), default="queued", index=True)
-    input_image_id: Mapped[int] = mapped_column(ForeignKey("media.id"), index=True)
-    input_image_2_id: Mapped[int | None] = mapped_column(
-        ForeignKey("media.id"), nullable=True
-    )
-    input_image_3_id: Mapped[int | None] = mapped_column(
-        ForeignKey("media.id"), nullable=True
-    )
-    input_video_id: Mapped[int] = mapped_column(ForeignKey("media.id"), index=True)
-    output_video_id: Mapped[int] = mapped_column(ForeignKey("media.id"), index=True)
+    media_ids: Mapped[list[MediaSnapshot]] = mapped_column(MediaSnapshotList, nullable=False, default=list)
     face_order: Mapped[str] = mapped_column(String(32), default="left-right")
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -107,8 +107,41 @@ class Job(Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(AwareDateTime(), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(AwareDateTime(), nullable=True)
-    input_image: Mapped[Media] = relationship(foreign_keys=[input_image_id])
-    input_image_2: Mapped[Media | None] = relationship(foreign_keys=[input_image_2_id])
-    input_image_3: Mapped[Media | None] = relationship(foreign_keys=[input_image_3_id])
-    input_video: Mapped[Media] = relationship(foreign_keys=[input_video_id])
-    output_video: Mapped[Media] = relationship(foreign_keys=[output_video_id])
+
+
+class MusicJob(Base):
+    __tablename__ = "music_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    status: Mapped[str] = mapped_column(String(16), default="queued", index=True)
+    prompt: Mapped[str] = mapped_column(Text, default="")
+    task_type: Mapped[str] = mapped_column(String(32), default="")
+    seed: Mapped[int] = mapped_column(Integer, default=-1)
+    inference_steps: Mapped[int] = mapped_column(Integer, default=8)
+    shift: Mapped[float] = mapped_column(Float, default=3.0)
+    parameters: Mapped[MusicParameters] = mapped_column(MusicParametersColumn, nullable=False)
+    media_ids: Mapped[list[MediaSnapshot]] = mapped_column(MediaSnapshotList, nullable=False, default=list)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        AwareDateTime(), default=utcnow, index=True
+    )
+    started_at: Mapped[datetime | None] = mapped_column(AwareDateTime(), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(AwareDateTime(), nullable=True)
+
+
+class TextJob(Base):
+    __tablename__ = "text_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    status: Mapped[str] = mapped_column(String(16), default="queued", index=True)
+    prompt: Mapped[str] = mapped_column(Text, default="")
+    parameters: Mapped[TextParameters] = mapped_column(TextParametersColumn, nullable=False)
+    output: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        AwareDateTime(), default=utcnow, index=True
+    )
+    started_at: Mapped[datetime | None] = mapped_column(AwareDateTime(), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(AwareDateTime(), nullable=True)

@@ -6,9 +6,10 @@ from pathlib import Path
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.jobs import get_job, insert_job, mark_failed, mark_running, mark_succeeded
+from app.db.jobs import get_job, insert_job, mark_failed, mark_succeeded
 from app.db.media import IMAGE, IMAGES, VIDEO, VIDEOS, create_media, get_media, move_media
-from app.db.models import Job, Media, Thumbnail
+from app.db.media_link import OUTPUT, SOURCE, VIDEO as VIDEO_ROLE, assign, models_for
+from app.db.models import Job, Media, Thumbnail, utcnow
 from app.db.session import session_scope
 from app.inference.pipeline import SwapRunner, swap_faces
 from app.media import (
@@ -161,18 +162,12 @@ async def queue_swap(
         output = await create_media(db, VIDEO, "output.mp4", directory / "output.mp4", 0, duration)
         if images[0] is None:
             raise _choice("Send a new source image or choose one that was already uploaded.")
-        job = await insert_job(
-            db,
-            Job(
-                status="queued",
-                input_image_id=images[0].id,
-                input_image_2_id=images[1].id if images[1] is not None else None,
-                input_image_3_id=images[2].id if images[2] is not None else None,
-                input_video_id=video.id,
-                output_video_id=output.id,
-                face_order=face_order,
-            ),
-        )
+        linked = [(image, index, SOURCE) for index, image in enumerate(images) if image is not None]
+        linked.append((video, 0, VIDEO_ROLE))
+        linked.append((output, 0, OUTPUT))
+        job = Job(status="queued", face_order=face_order)
+        assign(job, linked)
+        job = await insert_job(db, job)
         await db.commit()
     except Exception:
         await db.rollback()
@@ -191,6 +186,7 @@ async def queue_swap(
         move_media(video, final_dir / video_path.name)
         fresh.append(video)
     move_media(output, final_dir / "output.mp4", f"{job.id}.mp4")
+    assign(job, linked)
     await db.commit()
     await _attach_thumbnails(db, fresh)
 
@@ -222,16 +218,14 @@ async def execute_swap(job_id: int, runner: SwapRunner | None = None) -> None:
         job = await get_job(session, job_id)
         if job is None or job.status in {"succeeded", "failed"}:
             return
-        sources = [Path(job.input_image.path)]
-        if job.input_image_2 is not None:
-            sources.append(Path(job.input_image_2.path))
-        if job.input_image_3 is not None:
-            sources.append(Path(job.input_image_3.path))
-        video = Path(job.input_video.path)
-        output = Path(job.output_video.path)
+        sources = [Path(media.path) for media in models_for(job, SOURCE)]
+        video = Path(models_for(job, VIDEO_ROLE)[0].path)
+        output_media = models_for(job, OUTPUT)[0]
+        output = Path(output_media.path)
         face_order = job.face_order
-        output_id = job.output_video.id
-        await mark_running(session, job)
+        output_id = output_media.id
+        job.status = "running"
+        job.started_at = utcnow()
     log.info("job %s running", job_id)
 
     try:

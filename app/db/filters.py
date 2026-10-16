@@ -1,5 +1,5 @@
 from fastapi_filter.contrib.sqlalchemy import Filter
-from sqlalchemy import or_
+from sqlalchemy import String, cast, or_
 from sqlalchemy.sql import Select
 
 from app.db.models import Job, Media
@@ -30,9 +30,7 @@ class JobFilter(Filter):
             Job.status.ilike(like),
             Job.model_name.ilike(like),
             Job.face_order.ilike(like),
-            Job.input_image.has(Media.filename.ilike(like)),
-            Job.input_video.has(Media.filename.ilike(like)),
-            Job.output_video.has(Media.filename.ilike(like)),
+            cast(Job.media_ids, String).ilike(like),
         ]
         if self.q.isdigit():
             clauses.append(Job.id == int(self.q))

@@ -1,3 +1,4 @@
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -9,6 +10,7 @@ from app.shared.errors import MediaRejected
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 VIDEO_SUFFIXES = {".mp4", ".mov", ".webm", ".mkv"}
+AUDIO_SUFFIXES = {".wav", ".flac", ".ogg", ".mp3"}
 _PNG = b"\x89PNG\r\n\x1a\n"
 _JPEG = b"\xff\xd8\xff"
 _RIFF = b"RIFF"
@@ -95,6 +97,52 @@ def probe_duration_seconds(path: Path) -> float:
             400,
             "video_too_long",
             f"Video is {duration:.1f}s. The limit is {limit:.0f}s.",
+        )
+    return duration
+
+
+def probe_audio_duration(path: Path) -> float:
+    """Return the duration of an audio file, or reject it."""
+    try:
+        proc = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration:stream=codec_type",
+                "-of",
+                "json",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise MediaRejected(500, "ffprobe_missing", "ffprobe is not installed.") from exc
+    if proc.returncode != 0:
+        raise MediaRejected(400, "invalid_audio", "Could not read the audio file.")
+    try:
+        payload = json.loads(proc.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        raise MediaRejected(400, "invalid_audio", "Could not read the audio file.") from exc
+    streams = payload.get("streams") or []
+    if not any(item.get("codec_type") == "audio" for item in streams):
+        raise MediaRejected(400, "invalid_audio", "The file has no audio stream.")
+    try:
+        duration = float((payload.get("format") or {}).get("duration"))
+    except (TypeError, ValueError) as exc:
+        raise MediaRejected(400, "invalid_audio", "Could not read the audio duration.") from exc
+    settings = get_settings()
+    if duration < settings.min_audio_duration_sec:
+        raise MediaRejected(400, "audio_duration", "Audio duration is too short.")
+    if duration > settings.max_audio_duration_sec:
+        raise MediaRejected(
+            400,
+            "audio_duration",
+            f"Audio is {duration:.1f}s. The limit is {settings.max_audio_duration_sec:.0f}s.",
         )
     return duration
 

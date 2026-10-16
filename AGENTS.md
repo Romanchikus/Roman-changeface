@@ -2,10 +2,12 @@
 
 - No `git commit`, `git push`, or history rewrite.
 - Simple names. Split large logic. No extra abstractions.
+- Do not add a function for one, two, or three simple actions. Write them where the work happens.
 - Short docstrings only for public or non-obvious methods.
 - Log operations and failures. Never log secrets, tokens, passwords, or cookies.
 - Test behavior when it can be tested, including failure, auth, and rollback.
 - DB tests hit real PostgreSQL. Do not mock those queries.
+- Avoid use dicts, use typed objects instead.
 
 - Async FastAPI and async SQLAlchemy. `select()` only, not legacy `Query`.
 - Thin routers. Use cases in services. SQL in `app/db/` query modules. Schemas in `app/schemas.py`, not on models.
@@ -22,4 +24,5 @@
 
 - Routers `app/api/routers/`. Auth `app/api/deps.py`. Models `app/db/models.py`. Session `app/db/session.py`. Worker `app/worker/`. Inference `app/inference/`. Settings `app/shared/`. Migrations `migrations/`. UI `frontend/`.
 - `facefusion/` is a separate checkout. Call it from `app/inference/`.
+- Music is a module of this app: `app/services/music.py` and `app/inference/acestep.py`. It stores files the same way a face swap does. The worker currently passes.
 - Skip a layer this service does not need.

@@ -1,6 +1,6 @@
 # Changeface
 
-Queue a face swap, poll the job, download the video.
+Queue a face swap or a music track, poll the job, download the file.
 
 `POST /api/swap` stores the source image, target video, and a job, then returns. One Celery worker runs inference, writes the output, and records the model and duration. The client polls `GET /api/jobs/{id}`.
 
@@ -43,8 +43,13 @@ Signed-in routes use the `session` cookie. `health`, `limits`, `register`, and `
 
 | | |
 | --- | --- |
-| `POST /api/swap` | Queue a job |
-| `GET /api/jobs` | List. `GET /api/jobs/{id}` detail, `.../download` the result |
+| `POST /api/swap` | Queue a face swap |
+| `POST /api/v1/music` | Queue a track. Optional prompt, and optional `audio_id` of stored audio |
+| `POST /api/v1/text` | Queue Llama text. Required `model`, `prompt`, and `max_new_tokens` |
+| `GET /api/jobs` | Face swaps. `GET /api/jobs/{id}` detail, `.../download` the result |
+| `GET /api/v1/music/jobs/{id}` | One music job |
+| `GET /api/v1/text/jobs/{id}` | One text job |
+| `GET /api/files/audios` | Audio media. `GET /api/files/audios/{id}/download` the file |
 | `GET /api/files/{kind}` | List. `GET /api/files/{kind}/{id}` one file, `.../download` the original, `.../preview` the JPEG |
 | `POST /api/register` `POST /api/login` | Set the cookie. `GET /api/me` `POST /api/logout` |
 | `GET /api/health` `GET /api/limits` | Liveness, upload limits, backend |
@@ -52,6 +57,14 @@ Signed-in routes use the `session` cookie. `health`, `limits`, `register`, and `
 ## Limits
 
 Source image 10 MB. Target video 100 MB, 30 seconds. One GPU job, held by a Redis lock.
+
+## Music
+
+Music is a module of this app (`app/services/music.py`, `app/inference/acestep.py`). It uses the same database, worker, and file layout as a face swap: `storage/_incoming/…`, then `storage/{job id}/`. The request takes a stored `audio_id`, not an upload. The output row is `storage/{job id}/output.flac`. The worker currently records the job and does not run the model.
+
+## Text
+
+Text is a module of this app (`app/services/text_jobs.py`). `POST /api/v1/text` stores a `TextJob` whose `parameters` JSON holds the Llama 3.1 8B Instruct or Llama 3.3 8B settings. `model`, `prompt`, and `max_new_tokens` are required. Sampling fields such as `temperature`, `top_p`, `top_k`, and `stop` are optional. The worker records the job and does not run the model.
 
 ## FaceFusion
 
